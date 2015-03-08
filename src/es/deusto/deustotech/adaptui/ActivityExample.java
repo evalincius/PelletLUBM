@@ -119,6 +119,7 @@ public class ActivityExample extends Activity {
             // put here everything that needs to be done after your async task finishes
             progressDialog.dismiss();
             stop();
+            finishWithResult();
             finish();
         }
 }
@@ -173,7 +174,7 @@ public void executeQueries() {
 	System.out.println("There was " + OntologyLoaderDrained + "mAh" + " drained by ontology loader");
 	System.out.println("There was " + Reasonerdrained + "mAh" + " drained by reasoner");
 	write("log", "________________________________________"+ "\n"+"Pellet Reasoner " +Reasonerdrained+"mAh"+"\n"
-	+ "Pellet ont loader " + OntologyLoaderDrained +"mAh"+"\n" + s + "\n"
+	+ "Pellet ont loader " + OntologyLoaderDrained +"mAh"+"\n" + "Pellet Total: " +drained+ "\n"
 	+"Pellet Running : " + ontologyName+"\n________________________");
 	qe.close();
 	
@@ -223,14 +224,14 @@ public void start() {
         public void run() {	            
            // draw = draw + (bat());
         	float curret =bat(); 
-        	drained =drained +(curret/7200);
+        	drained =drained +(curret/64000);
             		//System.out.println("Current mA = " + curret + "mA"+ "\n"+
 					//"Capacity Drained = " + drained + "mAh"+ "\n");
 					
     		//batteryInfo=(TextView)findViewById(R.id.textView);
 
        }
-   }, 0, 500 );
+   }, 0, 50 );
 }
 public void stop() {
     timer.cancel();
@@ -286,6 +287,15 @@ public void write(String fname, String fcontent){
       return response;
    }
 
-
+   private void finishWithResult()
+   {
+      Bundle conData = new Bundle();
+      conData.putInt("results", 1);
+      Intent intent = new Intent();
+      intent.putExtras(conData);
+      setResult(RESULT_OK, intent);
+      finish();
+   }
+   
 
 }

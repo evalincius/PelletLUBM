@@ -287,7 +287,7 @@ public void start() {
     timer.schedule(new TimerTask() {
         public void run() {	            
         	float curret =bat(); 
-        	drained =drained +(curret/64000);
+        	drained =drained +(curret/3300);
         	runOnUiThread(new Runnable() {
 
         	    @Override
@@ -298,14 +298,14 @@ public void start() {
 	        		((TextView)findViewById(R.id.textView)).setText("Capacity Drained = " + drained + "mAh \n"+
     				"Time Elapsed: "+timeElapsed+"s");
 	        		//This if ABORTS the reasoning task because it took too long,
-	        		if(timeElapsed>900||drained>60){
+	        		if(timeElapsed>900||drained>45){
 	        			quiteAnApp();
 	        		}
         	            }
         	    });
         	
        }
-   }, 0, 50 );
+   }, 0, 1000 );
 }
 public void stop() {
     timer.cancel();
@@ -384,7 +384,8 @@ public void write(String fname, String fcontent){
 	            progressDialog.dismiss();
 	    		stop();
 	            finishWithResult();
-	            finish();		   
+	            finish();
+	            System.exit(0);
    }
    
 

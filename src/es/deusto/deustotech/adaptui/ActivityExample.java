@@ -22,12 +22,15 @@ import org.mindswap.pellet.jena.PelletReasonerFactory;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.ProgressDialog;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.AsyncTask;
 import android.os.BatteryManager;
 import android.os.Bundle;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.GridLayout;
 import android.widget.TextView;
 
@@ -38,6 +41,7 @@ import com.hp.hpl.jena.query.QueryExecutionFactory;
 import com.hp.hpl.jena.query.QueryFactory;
 import com.hp.hpl.jena.query.ResultSetFormatter;
 import com.hp.hpl.jena.rdf.model.ModelFactory;
+
 
 
 @SuppressLint("SdCardPath")
@@ -59,13 +63,20 @@ public class ActivityExample extends Activity {
 	private String ontologyName,queryName;
 	private long startCountingTime;
 	private long stopCountingTime;
+	
+	private BroadcastReceiver batteryInfoReceiver;
+	private int mvoltage;
+	private float watts;
+	private float ReasonerdrainedWatts;
+	private float OntologyLoaderDrainedWatts;
 
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		
 		setContentView(R.layout.main_activity);
+	    getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
 		
 		progressDialog = new ProgressDialog(this); 
 		// spinner (wheel) style dialog
@@ -137,6 +148,7 @@ public void executeQueries() {
 	}
 	
 	start();//Starts timer that calculates the mAh drained
+	getVoltage();
 	startCountingTime= System.currentTimeMillis();
 
 	model.read(in, null);
@@ -195,6 +207,7 @@ public void executeQueries() {
 	//boolean to measure the ontology loader power consumption within the loop		
 	boolean NOTmeasured = true;
 	float PrewReasonerDrained = 0;
+	float PrewReasonerDrainedWatts = 0;
 	for(int i= 0; i<queries.length; i++){
 		try{	
 			String queryString = queries[i];
@@ -205,7 +218,9 @@ public void executeQueries() {
 			if(NOTmeasured){
 				//records how much loader drained of a battery
 				OntologyLoaderDrained = drained;
-				write("ontLoader", OntologyLoaderDrained +"");
+   				OntologyLoaderDrainedWatts = watts;	
+   				write("ontLoader",""+ OntologyLoaderDrained);
+   				write("PowerLoader",""+ OntologyLoaderDrainedWatts);
 				NOTmeasured = false;
 			}
 			
@@ -230,22 +245,21 @@ public void executeQueries() {
 			}
 			System.out.println(s);
 			
-			//records how much reasoner drained.
+    		//records how much mAh reasoner drained.
 			Reasonerdrained = drained - OntologyLoaderDrained- PrewReasonerDrained;
-			
-			
-			
-			
+			//records how much watts reasoner drained
+			ReasonerdrainedWatts = watts - OntologyLoaderDrainedWatts- PrewReasonerDrainedWatts;
+
 			//keeps record of previous reasoner
 			PrewReasonerDrained = PrewReasonerDrained + Reasonerdrained;
-			System.out.println("There was " + OntologyLoaderDrained + "mAh" + " drained by ontology loader");
-			System.out.println("There was " + Reasonerdrained + "mAh" + " drained by reasoner");
+			PrewReasonerDrainedWatts = PrewReasonerDrainedWatts + ReasonerdrainedWatts;
 			
 			
 			write("log", "________________________________________\n"+"Query: "+ queryName + "\n"+"Pellet Reasoner " +Reasonerdrained+"mAh"+"\n"
 			+ "Pellet ont loader " + OntologyLoaderDrained +"mAh"+"\n" + "Pellet Total drained "+drained +"mAh"+"\n"
-			+"Pellet Running : " + ontologyName+"\n________________________");
+			+"Pellet Running : " + ontologyName+"\n Time Elapsed: "+timeElapsed+"s\n"+"WattsDrained"+watts+"W"+"\n________________________");
 			write("justdata", ""+Reasonerdrained );
+    		write("PowerReasoner", ""+ ReasonerdrainedWatts);
 			write("Results", ""+s );
 	
 			
@@ -286,26 +300,30 @@ public void start() {
     timer = new Timer();	   
     timer.schedule(new TimerTask() {
         public void run() {	            
-        	float curret =bat(); 
-        	drained =drained +(curret/3300);
+        	final float curret =bat();
+        	drained =drained +(curret/3300);//3300s instead 3600s because after calculations there 
+        	//were some error rate determined and diviation from 3300 covers the loss of data that
+        	//was missed to be recorded. Calculated by measuring amount of current drained per 1% and finding 
+        	//the constant that derives 31mah
+        	watts = (float) ((drained*mvoltage/1000)*3.6);
         	runOnUiThread(new Runnable() {
 
         	    @Override
         	    public void run() {
         	    	stopCountingTime = System.currentTimeMillis()-startCountingTime;	
-    				float timeElapsed2 = stopCountingTime;
-    				timeElapsed = timeElapsed2/1000;		
-	        		((TextView)findViewById(R.id.textView)).setText("Capacity Drained = " + drained + "mAh \n"+
-    				"Time Elapsed: "+timeElapsed+"s");
+    				float timeElapsed = (float) (stopCountingTime/1000.0);	
+    				((TextView)findViewById(R.id.textView)).setText("Capacity Drained = " + drained + "mAh \n"+ 
+		        			"Time elapsed : " +timeElapsed + "s\n"+"Voltage: "+mvoltage+"V"
+		        					+ "\nPower used: "+watts+"W");
 	        		//This if ABORTS the reasoning task because it took too long,
-	        		if(timeElapsed>900||drained>45){
+	        		if(timeElapsed>300||drained>45){
 	        			quiteAnApp();
 	        		}
-        	            }
-        	    });
+        	    }
+        	 });
         	
        }
-   }, 0, 1000 );
+   }, 0, 1000);
 }
 public void stop() {
     timer.cancel();
@@ -372,14 +390,14 @@ public void write(String fname, String fcontent){
    public void quiteAnApp(){
 	   
 	   Reasonerdrained = drained-OntologyLoaderDrained;
+	   ReasonerdrainedWatts = watts-OntologyLoaderDrainedWatts;
+	   stopCountingTime = System.currentTimeMillis()-startCountingTime;	
 		write("log", "ABORTED due to Out Of Memory/Time \n"+"________________________________________\n"+"Query: "+ queryName + "\n"+"Pellet Reasoner " +Reasonerdrained+"mAh"+"\n"
 	    		+ "Pellet ont loader " + OntologyLoaderDrained +"mAh"+"\n" + "Pellet Total: " +drained+"mAh"+ "\n"
-	    		+"Pellet Running : " + ontologyName+"\n Time Elapsed: "+timeElapsed+"s"+"\n________________________");
+	    		+"Pellet Running : " + ontologyName+"\n Time Elapsed: "+timeElapsed+"s\n"+"WattsDrained"+watts+"W"+"\n________________________");
 	    		write("justdata", ""+Reasonerdrained );
+	    		write("PowerReasoner", ""+ ReasonerdrainedWatts);
 	    		write("Results", "Results Aborted " );
-	    		stopCountingTime = System.currentTimeMillis()-startCountingTime;	
-				float timeElapsed2 = stopCountingTime;
-				timeElapsed = timeElapsed2/1000;			//System.out.println("Time elapsed when runnig simulation :" +(stopCountingTime/1000) + "s" );
 				write("ReasonerTime", "" +timeElapsed );
 	            progressDialog.dismiss();
 	    		stop();
@@ -387,6 +405,15 @@ public void write(String fname, String fcontent){
 	            finish();
 	            System.exit(0);
    }
+   public void getVoltage(){
+       batteryInfoReceiver = new BroadcastReceiver() {
+			@Override
+			public void onReceive(Context context, Intent intent) {			
+				mvoltage= intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE,0);				
+			}
+		};
+		registerReceiver(this.batteryInfoReceiver,	new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+	}
    
 
 }
